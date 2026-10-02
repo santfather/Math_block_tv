@@ -64,6 +64,7 @@
     <string name="package_youtube">YouTube</string>
     <string name="package_youtube_kids">YouTube Дети</string>
     <string name="package_youtube_music">YouTube Music</string>
+    <string name="package_browser">Браузер</string>
     <string name="parent_warn_label">Предупреждать до лимита</string>
     <string name="parent_reset_on_power_loss_label">Сбрасывать таймер после отключения питания</string>
     <string name="parent_stats_label">Статистика</string>

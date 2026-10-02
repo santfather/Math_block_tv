@@ -18,11 +18,17 @@ data class Settings(
     companion object {
         const val DEFAULT_LIMIT_MS: Long = 15 * 60 * 1000L
 
-        /** Placeholders; the real package names are recorded in DEVICE_NOTES.md (phase 0). */
+        /**
+         * Packages treated as "watched" (D-02). The TV browser is included by default (phase 8):
+         * YouTube played in a browser is the same kind of video, and the URL cannot be inspected
+         * without reading page content, so the whole browser counts. A parent can untick it in
+         * the settings to allow unrestricted browsing. Confirmed names are in DEVICE_NOTES.md.
+         */
         val DEFAULT_WATCHED_PACKAGES: List<String> = listOf(
             "com.google.android.youtube.tv",
             "com.google.android.youtube.tvkids",
             "com.google.android.youtube.tvmusic",
+            "com.tvwebbrowser.v22",
         )
     }
 }

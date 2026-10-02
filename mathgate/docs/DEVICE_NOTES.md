@@ -223,6 +223,48 @@ Create PIN → Confirm PIN → Done`; PIN-пад принимает цифры �
 - запасной вход: долгое нажатие (≥ 1 с) на заголовок «Реши пример» в `BlockActivity` открывает
   PIN-гейт `ParentActivity`.
 
+## Наблюдения фазы 8 (закрытие обходов, проверено на устройстве)
+
+**Браузер.** `com.tvwebbrowser.v22` включён в дефолтный список отслеживаемых (и в опции настроек).
+Открытие браузера распознаётся как «просмотр»:
+
+```
+foreground -> true  (package=com.tvwebbrowser.v22)
+foreground -> false (package=com.google.android.apps.tv.launcherx)
+```
+
+**Голосовой поиск / кнопка пульта.** У `com.google.android.katniss` (Google TV) нет launcher-
+активности: голосовой поиск сам YouTube не запускает. `intent VIEW` на ссылку `https://youtu.be/…`
+открывает обычный YouTube, который уже отслеживается:
+
+```
+foreground -> true (package=com.google.android.youtube.tv)
+```
+
+Итог: запуск через голосовой поиск/ассистента приводит к тому же пакету и ловится детектором.
+
+**Самовосстановление accessibility (повторно, фаза 8).** Удаление службы из списка → возврат за
+**~80 мс**:
+
+```
+settings delete secure enabled_accessibility_services -> accessibility service re-added
+```
+
+**Остановка приложения (`am force-stop com.mathgate`) — реальный обход.** После `force-stop`
+процесса нет, `enabled_accessibility_services` = `null`; автоматического восстановления нет ни
+через 10, ни через 30 с (нет процесса, некому выполнить `SelfHealer`/`BootReceiver`). Сервис
+поднимается только при следующем запуске приложения или после перезагрузки ТВ. Так как
+`force-stop` требует adb или системного «Остановить», для ребёнка через пульт он недостижим, но
+через системные настройки приложений — достижим (см. `PARENT_GUIDE.md`).
+
+**PiP / картинка в картинке.** На прошивке нет фичи `android.software.picture_in_picture`
+(`pm list features`), и `com.google.android.youtube.tv` не объявляет `supportsPictureInPicture`
+(`dumpsys package`). PiP на этом ТВ недоступен, отдельного обхода не создаёт.
+
+**Пакеты ТВ (фаза 8).** Найденные браузеры и медиа-пакеты: `com.tvwebbrowser.v22` (браузер),
+`com.google.android.katniss` (Google TV), `com.google.android.youtube.tv` / `.tvkids` / `.tvmusic`.
+Сторонние клиенты YouTube (SmartTube и подобные) на ТВ не установлены.
+
 ## Что ещё нужно проверить вручную (не критично для фаз 1–7)
 
 - Поведение при выключении кнопкой пульта: сон или полное выключение; включён ли «быстрый запуск».

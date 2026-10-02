@@ -57,6 +57,7 @@ private val WatchedPackageOptions = listOf(
     "com.google.android.youtube.tv" to R.string.package_youtube,
     "com.google.android.youtube.tvkids" to R.string.package_youtube_kids,
     "com.google.android.youtube.tvmusic" to R.string.package_youtube_music,
+    "com.tvwebbrowser.v22" to R.string.package_browser,
 )
 
 /**
