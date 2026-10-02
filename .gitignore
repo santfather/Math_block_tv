@@ -1,0 +1,33 @@
+# ---------------------------------------------------------------------------
+# Math Gate — repository-wide ignore rules.
+# The Android project lives in mathgate/; there is a module-local .gitignore too.
+# ---------------------------------------------------------------------------
+
+# Gradle / Android build output (matched at any depth)
+build/
+.gradle/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Machine-specific SDK path — must never be committed
+local.properties
+
+# IDE / editor
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Signing material — never commit keys
+*.keystore
+*.jks
+app/release/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*~
+
+# Logs and local reports
+*.log

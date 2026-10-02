@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base TV theme: dark, no action bar (Compose draws the UI). -->
+    <style name="Theme.MathGate" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/background_dark</item>
+        <item name="android:colorBackground">@android:color/background_dark</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <!-- Challenge surface: fullscreen, no dim, silent entry (phase 4). -->
+    <style name="Theme.MathGate.Block" parent="Theme.MathGate">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+</resources>

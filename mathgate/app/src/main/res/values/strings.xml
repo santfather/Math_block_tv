@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Math Gate</string>
+
+    <string name="accessibility_service_label">Math Gate — контроль YouTube</string>
+    <string name="accessibility_service_description">Определяет, когда YouTube открыт на переднем плане, чтобы вовремя показать математический пример. Содержимое экрана не читается.</string>
+
+    <!-- Keep-alive foreground service notification (phase 3). -->
+    <string name="guard_channel_name">Контроль YouTube</string>
+    <string name="guard_notification_title">Math Gate работает</string>
+
+    <!-- Challenge screen (phase 4). -->
+    <string name="block_title">Реши пример</string>
+    <string name="block_answer_hint">Ответ</string>
+    <string name="block_erase">Стереть</string>
+    <string name="block_submit">Ответить</string>
+    <string name="block_correct">Правильно!</string>
+    <string name="block_wrong">Попробуй ещё</string>
+    <string name="block_cooldown">Подожди %1$d с</string>
+    <!-- Quiet warning shortly before the limit (phase 5). -->
+    <string name="block_warning">Скоро перерыв: приготовься решить пример</string>
+
+    <!-- Placeholder strings for the skeleton; real copy lands in phase 7. -->
+    <string name="setup_title">Настройка Math Gate</string>
+    <string name="setup_placeholder">Мастер первичной настройки появится в фазе 7.</string>
+    <string name="parent_placeholder">Родительские настройки появятся в фазе 7.</string>
+</resources>
