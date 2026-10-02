@@ -20,8 +20,66 @@
     <!-- Quiet warning shortly before the limit (phase 5). -->
     <string name="block_warning">Скоро перерыв: приготовься решить пример</string>
 
-    <!-- Placeholder strings for the skeleton; real copy lands in phase 7. -->
+    <!-- First-run wizard (phase 7). -->
     <string name="setup_title">Настройка Math Gate</string>
-    <string name="setup_placeholder">Мастер первичной настройки появится в фазе 7.</string>
-    <string name="parent_placeholder">Родительские настройки появятся в фазе 7.</string>
+    <string name="setup_welcome_body">Math Gate показывает пример, когда ребёнок смотрит YouTube дольше заданного времени. Сначала дайте приложению два разрешения, затем придумайте PIN для настроек.</string>
+    <string name="setup_permissions_body">Чтобы app видел, когда открыт YouTube, нужны два разрешения:</string>
+    <string name="setup_a11y_title">Специальные возможности</string>
+    <string name="setup_usage_title">Доступ к статистике использования</string>
+    <string name="setup_permissions_hint">После включения вернитесь сюда — статус обновится автоматически.</string>
+    <string name="setup_permission_granted">Разрешено</string>
+    <string name="setup_permission_missing">Не разрешено</string>
+    <string name="setup_permission_open">Открыть</string>
+    <string name="setup_step_pin">PIN родителя</string>
+    <string name="setup_pin_body">Придумайте PIN из %1$d–%2$d цифр. Он защищает настройки от ребёнка.</string>
+    <string name="setup_pin_confirm_body">Повторите PIN, чтобы исключить опечатку.</string>
+    <string name="setup_pin_invalid">PIN должен состоять из %1$d–%2$d цифр.</string>
+    <string name="setup_pin_mismatch">PIN не совпал, попробуйте снова.</string>
+    <string name="setup_done_body">Готово. Настройки открываются по PIN. Установите лимит и сложность примеров в родительском режиме.</string>
+    <string name="setup_open_settings">Открыть настройки</string>
+    <string name="setup_finish">Позже</string>
+    <string name="setup_back">Назад</string>
+    <string name="setup_next">Далее</string>
+
+    <!-- Parent mode: PIN gate (phase 7). -->
+    <string name="parent_loading">Загрузка…</string>
+    <string name="parent_pin_prompt">Введите PIN родителя</string>
+    <string name="parent_pin_wrong">Неверный PIN</string>
+    <string name="parent_pin_checking">Проверка…</string>
+    <string name="parent_pin_locked">Слишком много попыток. Подождите %1$d с.</string>
+    <string name="parent_no_pin">PIN ещё не задан. Завершите первичную настройку.</string>
+    <string name="parent_no_pin_action">Настроить</string>
+    <string name="parent_back">Назад</string>
+
+    <!-- Parent mode: settings screen (phase 7). -->
+    <string name="parent_settings_title">Родительские настройки</string>
+    <string name="parent_limit_label">Дневной лимит</string>
+    <string name="parent_minutes">%1$d мин</string>
+    <string name="parent_difficulty_label">Сложность примеров</string>
+    <string name="parent_level">Уровень %1$d</string>
+    <string name="parent_input_label">Режим ввода ответа</string>
+    <string name="parent_input_digits">Цифры</string>
+    <string name="parent_input_choice">Варианты</string>
+    <string name="parent_packages_label">Какие приложения контролировать</string>
+    <string name="package_youtube">YouTube</string>
+    <string name="package_youtube_kids">YouTube Дети</string>
+    <string name="package_youtube_music">YouTube Music</string>
+    <string name="parent_warn_label">Предупреждать до лимита</string>
+    <string name="parent_reset_on_power_loss_label">Сбрасывать таймер после отключения питания</string>
+    <string name="parent_stats_label">Статистика</string>
+    <string name="parent_stats_blocked">Блокировок: %1$d</string>
+    <string name="parent_stats_wrong">Неверных ответов: %1$d</string>
+    <string name="parent_stats_total">Всего просмотра: %1$s</string>
+    <string name="parent_unlock_now">Разблокировать сейчас</string>
+    <string name="parent_reset_timer">Сбросить таймер</string>
+    <string name="parent_unlocked_toast">Доступ к YouTube открыт</string>
+    <string name="parent_reset_toast">Таймер сброшен</string>
+
+    <!-- Shared controls and durations (phase 7). -->
+    <string name="toggle_on">Вкл</string>
+    <string name="toggle_off">Выкл</string>
+    <string name="pin_erase">Стереть</string>
+    <string name="pin_ok">ОК</string>
+    <string name="duration_minutes">%1$d мин</string>
+    <string name="duration_hours_minutes">%1$d ч %2$d мин</string>
 </resources>

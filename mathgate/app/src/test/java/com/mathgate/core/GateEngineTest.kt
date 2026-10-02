@@ -332,4 +332,86 @@ class GateEngineTest {
         assertEquals(0L, restored.cooldownUntilElapsedMs)
         assertEquals(afterWrong.problem.text, restored.problem.text)
     }
+
+    // --- Phase 7: statistics, live settings, reset timer ---
+
+    @Test
+    fun `statistics count blocked challenges, wrong answers and watched time`() {
+        val clock = FakeClock()
+        val engine = newEngine(clock)
+
+        engine.onEvent(GateEvent.YouTubeForeground)
+        clock.advance(60_000L)
+        engine.onEvent(GateEvent.Tick)
+        assertEquals(60_000L, engine.currentStats.totalWatchedMs)
+
+        clock.advance(limitMs - 60_000L)
+        engine.onEvent(GateEvent.Tick)
+        val pending = assertIs<GateState.ChallengePending>(engine.currentState)
+        assertEquals(1, engine.currentStats.blockedCount)
+        assertEquals(limitMs, engine.currentStats.totalWatchedMs)
+
+        engine.onEvent(GateEvent.AnswerSubmitted(pending.problem.answer + 1))
+        assertEquals(1, engine.currentStats.wrongAnswers)
+
+        // A correct answer unlocks and resets the counter but keeps the lifetime stats.
+        val unlocked = assertIs<GateState.ChallengePending>(engine.currentState)
+        engine.onEvent(GateEvent.AnswerSubmitted(unlocked.problem.answer))
+        assertEquals(1, engine.currentStats.blockedCount)
+        assertEquals(1, engine.currentStats.wrongAnswers)
+    }
+
+    @Test
+    fun `statistics are seeded from the persisted state`() {
+        val clock = FakeClock()
+        val seeded = UsageStats(blockedCount = 4, wrongAnswers = 2, totalWatchedMs = 90 * 60_000L)
+        val engine = GateEngine(clock = clock, settings = settings, initialStats = seeded)
+
+        assertEquals(seeded, engine.currentStats)
+    }
+
+    @Test
+    fun `a new limit applies without restarting the engine`() {
+        val clock = FakeClock()
+        val engine = newEngine(clock)
+        engine.onEvent(GateEvent.YouTubeForeground)
+
+        clock.advance(5 * 60_000L)
+        engine.onEvent(GateEvent.Tick)
+        assertEquals(GateState.Counting(300_000L, 300_000L), engine.currentState)
+
+        // The parent raises the limit at runtime; the accumulated counter is untouched.
+        engine.updateSettings(settings.copy(limitMs = 30 * 60_000L))
+
+        clock.advance(5 * 60_000L)
+        engine.onEvent(GateEvent.Tick)
+        assertEquals(GateState.Counting(600_000L, 600_000L), engine.currentState)
+    }
+
+    @Test
+    fun `the reset timer action zeroes the counter and dismisses a pending challenge`() {
+        val clock = FakeClock()
+        val engine = newEngine(clock)
+        reachChallenge(clock, engine)
+
+        val (state, effects) = engine.onEvent(GateEvent.ResetTimer)
+        assertEquals(GateState.Counting(0L, clock.elapsedMs), state)
+        assertContains(effects, GateEffect.HideChallenge)
+        assertContains(effects, GateEffect.PersistState)
+    }
+
+    @Test
+    fun `the reset timer action leaves an idle engine at zero`() {
+        val clock = FakeClock()
+        val engine = newEngine(clock)
+        engine.onEvent(GateEvent.YouTubeForeground)
+        clock.advance(60_000L)
+        engine.onEvent(GateEvent.YouTubeBackground)
+        assertEquals(GateState.Idle(60_000L), engine.currentState)
+
+        val (state, effects) = engine.onEvent(GateEvent.ResetTimer)
+        assertEquals(GateState.Idle(0L), state)
+        assertContains(effects, GateEffect.PersistState)
+        assertFalse(effects.contains(GateEffect.HideChallenge))
+    }
 }

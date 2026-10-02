@@ -17,7 +17,6 @@ import androidx.core.app.NotificationCompat
 import com.mathgate.MathGateApp
 import com.mathgate.R
 import com.mathgate.core.EventLog
-import com.mathgate.core.Settings
 import com.mathgate.data.BootInfo
 import com.mathgate.detect.UsageStatsDetector
 import kotlinx.coroutines.CoroutineScope
@@ -39,9 +38,6 @@ class GuardForegroundService : Service() {
     private lateinit var app: MathGateApp
     private lateinit var eventLog: EventLog
     private lateinit var usageStatsDetector: UsageStatsDetector
-
-    @Volatile
-    private var watchedPackages: Set<String> = Settings.DEFAULT_WATCHED_PACKAGES.toSet()
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -86,9 +82,6 @@ class GuardForegroundService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification())
         record("guard service started (interactive=${isInteractive()})")
         app.gateCoordinator.start()
-        scope.launch {
-            watchedPackages = app.gateStore.readSettings().watchedPackages.toSet()
-        }
         startWatchdog()
         return START_STICKY
     }
@@ -123,7 +116,7 @@ class GuardForegroundService : Service() {
 
                 // No usable reading (permission denied / no recent transition): keep the state the
                 // primary channel last reported instead of forcing "not watched".
-                if (!usageStatsDetector.poll(watchedPackages)) continue
+                if (!usageStatsDetector.poll(app.gateCoordinator.watchedPackages.value)) continue
                 val watched = usageStatsDetector.watchedForeground.value
                 if (!fallbackActive || watched != lastWatched) {
                     fallbackActive = true

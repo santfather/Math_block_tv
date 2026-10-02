@@ -1,7 +1,9 @@
 package com.mathgate.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.byteArrayPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -11,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.mathgate.core.GateState
 import com.mathgate.core.Problem
 import com.mathgate.core.Settings
+import com.mathgate.core.UsageStats
 import kotlinx.coroutines.flow.first
 
 private const val DATASTORE_NAME = "mathgate"
@@ -47,13 +50,21 @@ class DataStoreGateStore(private val context: Context) : GateStore {
 
             else -> GateState.Idle(accumulated)
         }
-        return PersistedState(gateState, prefs[KEY_LAST_SEGMENT_MARKER] ?: 0L, prefs[KEY_STATE_BOOT_COUNT] ?: 0)
+        return PersistedState(
+            gateState = gateState,
+            lastSegmentMarker = prefs[KEY_LAST_SEGMENT_MARKER] ?: 0L,
+            bootCount = prefs[KEY_STATE_BOOT_COUNT] ?: 0,
+            stats = prefs.readStats(),
+        )
     }
 
     override suspend fun writeState(state: PersistedState) {
         context.gateDataStore.edit { prefs ->
             prefs[KEY_LAST_SEGMENT_MARKER] = state.lastSegmentMarker
             prefs[KEY_STATE_BOOT_COUNT] = state.bootCount
+            prefs[KEY_STATS_BLOCKED] = state.stats.blockedCount
+            prefs[KEY_STATS_WRONG] = state.stats.wrongAnswers
+            prefs[KEY_STATS_WATCHED_MS] = state.stats.totalWatchedMs
             when (val gate = state.gateState) {
                 is GateState.Idle -> {
                     prefs[KEY_STATE_TYPE] = STATE_IDLE
@@ -79,13 +90,15 @@ class DataStoreGateStore(private val context: Context) : GateStore {
 
     override suspend fun readSettings(): Settings {
         val prefs = context.gateDataStore.data.first()
+        // Single source of truth for the defaults: the Settings data class (phase 7 cleanup).
+        val defaults = Settings()
         return Settings(
-            limitMs = prefs[KEY_LIMIT_MS] ?: Settings.DEFAULT_LIMIT_MS,
-            difficultyLevel = prefs[KEY_DIFFICULTY] ?: 1,
-            multipleChoice = prefs[KEY_MULTIPLE_CHOICE] ?: false,
-            warnBeforeMs = prefs[KEY_WARN_BEFORE] ?: 60_000L,
-            resetOnPowerLoss = prefs[KEY_RESET_ON_POWER_LOSS] ?: false,
-            watchedPackages = prefs[KEY_WATCHED_PACKAGES]?.toList() ?: Settings.DEFAULT_WATCHED_PACKAGES,
+            limitMs = prefs[KEY_LIMIT_MS] ?: defaults.limitMs,
+            difficultyLevel = prefs[KEY_DIFFICULTY] ?: defaults.difficultyLevel,
+            multipleChoice = prefs[KEY_MULTIPLE_CHOICE] ?: defaults.multipleChoice,
+            warnBeforeMs = prefs[KEY_WARN_BEFORE] ?: defaults.warnBeforeMs,
+            resetOnPowerLoss = prefs[KEY_RESET_ON_POWER_LOSS] ?: defaults.resetOnPowerLoss,
+            watchedPackages = prefs[KEY_WATCHED_PACKAGES]?.toList() ?: defaults.watchedPackages,
         )
     }
 
@@ -115,6 +128,52 @@ class DataStoreGateStore(private val context: Context) : GateStore {
         }
     }
 
+    override suspend fun readPin(): PinCredentials? {
+        val prefs = context.gateDataStore.data.first()
+        val salt = prefs[KEY_PIN_SALT] ?: return null
+        val hash = prefs[KEY_PIN_HASH] ?: return null
+        return PinCredentials(salt = salt, hash = hash)
+    }
+
+    override suspend fun writePin(credentials: PinCredentials) {
+        context.gateDataStore.edit { prefs ->
+            prefs[KEY_PIN_SALT] = credentials.salt
+            prefs[KEY_PIN_HASH] = credentials.hash
+            prefs[KEY_PIN_FAILED_ATTEMPTS] = 0
+            prefs[KEY_PIN_LOCKOUT_UNTIL] = 0L
+        }
+    }
+
+    override suspend fun clearPin() {
+        context.gateDataStore.edit { prefs ->
+            prefs.remove(KEY_PIN_SALT)
+            prefs.remove(KEY_PIN_HASH)
+            prefs[KEY_PIN_FAILED_ATTEMPTS] = 0
+            prefs[KEY_PIN_LOCKOUT_UNTIL] = 0L
+        }
+    }
+
+    override suspend fun readPinGuard(): PinGuard {
+        val prefs = context.gateDataStore.data.first()
+        return PinGuard(
+            failedAttempts = prefs[KEY_PIN_FAILED_ATTEMPTS] ?: 0,
+            lockoutUntilWallMs = prefs[KEY_PIN_LOCKOUT_UNTIL] ?: 0L,
+        )
+    }
+
+    override suspend fun writePinGuard(guard: PinGuard) {
+        context.gateDataStore.edit { prefs ->
+            prefs[KEY_PIN_FAILED_ATTEMPTS] = guard.failedAttempts
+            prefs[KEY_PIN_LOCKOUT_UNTIL] = guard.lockoutUntilWallMs
+        }
+    }
+
+    private fun Preferences.readStats() = UsageStats(
+        blockedCount = this[KEY_STATS_BLOCKED] ?: 0,
+        wrongAnswers = this[KEY_STATS_WRONG] ?: 0,
+        totalWatchedMs = this[KEY_STATS_WATCHED_MS] ?: 0L,
+    )
+
     private companion object {
 
         val KEY_STATE_TYPE = intPreferencesKey("state_type")
@@ -130,11 +189,20 @@ class DataStoreGateStore(private val context: Context) : GateStore {
         val KEY_BOOT_COUNT = intPreferencesKey("boot_count")
         val KEY_CLEAN_SHUTDOWN = booleanPreferencesKey("clean_shutdown")
 
+        val KEY_STATS_BLOCKED = intPreferencesKey("stats_blocked_count")
+        val KEY_STATS_WRONG = intPreferencesKey("stats_wrong_answers")
+        val KEY_STATS_WATCHED_MS = longPreferencesKey("stats_total_watched_ms")
+
         val KEY_LIMIT_MS = longPreferencesKey("settings_limit_ms")
         val KEY_DIFFICULTY = intPreferencesKey("settings_difficulty")
         val KEY_MULTIPLE_CHOICE = booleanPreferencesKey("settings_multiple_choice")
         val KEY_WARN_BEFORE = longPreferencesKey("settings_warn_before_ms")
         val KEY_RESET_ON_POWER_LOSS = booleanPreferencesKey("settings_reset_on_power_loss")
         val KEY_WATCHED_PACKAGES = stringSetPreferencesKey("settings_watched_packages")
+
+        val KEY_PIN_SALT = byteArrayPreferencesKey("pin_salt")
+        val KEY_PIN_HASH = byteArrayPreferencesKey("pin_hash")
+        val KEY_PIN_FAILED_ATTEMPTS = intPreferencesKey("pin_failed_attempts")
+        val KEY_PIN_LOCKOUT_UNTIL = longPreferencesKey("pin_lockout_until_wall")
     }
 }

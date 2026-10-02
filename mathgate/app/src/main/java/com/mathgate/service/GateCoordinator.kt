@@ -13,6 +13,7 @@ import com.mathgate.core.GateEngine
 import com.mathgate.core.GateEvent
 import com.mathgate.core.GateState
 import com.mathgate.core.Settings
+import com.mathgate.core.UsageStats
 import com.mathgate.data.GateStore
 import com.mathgate.data.PersistedState
 import com.mathgate.detect.ForegroundDetector
@@ -52,6 +53,14 @@ class GateCoordinator(
     /** Current engine state, or `null` until persisted state has been loaded. */
     val gateState: StateFlow<GateState?> = _gateState.asStateFlow()
 
+    private val _watchedPackages = MutableStateFlow(Settings.DEFAULT_WATCHED_PACKAGES.toSet())
+
+    /**
+     * Packages treated as "watched". Detectors read the live value, so a parent change to the
+     * list takes effect without restarting the services (phase 7).
+     */
+    val watchedPackages: StateFlow<Set<String>> = _watchedPackages.asStateFlow()
+
     private var engine: GateEngine? = null
     private var settings: Settings = Settings()
     private var started = false
@@ -78,6 +87,7 @@ class GateCoordinator(
         )
         scope.launch {
             settings = store.readSettings()
+            _watchedPackages.value = settings.watchedPackages.toSet()
             val persisted = store.readState()
             // A different boot counter means the device rebooted: elapsed times from the
             // previous session are meaningless, so a pending cooldown must be dropped (rule 6).
@@ -88,6 +98,7 @@ class GateCoordinator(
                 initialState = reconcile(persisted.gateState, rebooted),
                 initialWatchedForeground = false,
                 initialScreenOn = isInteractive(),
+                initialStats = persisted.stats,
             )
             _gateState.value = engine?.currentState
             // Normalize the stored state and record the current boot counter.
@@ -106,6 +117,37 @@ class GateCoordinator(
 
     /** Settings observed at startup (used by the challenge screen for input mode and difficulty). */
     fun currentSettings(): Settings = settings
+
+    /** Lifetime statistics accumulated by the engine (phase 7). */
+    fun currentStats(): UsageStats = engine?.currentStats ?: UsageStats()
+
+    /**
+     * Applies a parent change immediately (phase 7 DoD: settings work without a restart):
+     * the running engine gets the new limits, the detectors get the new package list and the
+     * value is persisted.
+     */
+    fun updateSettings(newSettings: Settings) {
+        settings = newSettings
+        engine?.updateSettings(newSettings)
+        _watchedPackages.value = newSettings.watchedPackages.toSet()
+        scope.launch { store.writeSettings(newSettings) }
+        record(
+            "settings updated (limit=${newSettings.limitMs}, level=${newSettings.difficultyLevel}, " +
+                "choice=${newSettings.multipleChoice}, packages=${newSettings.watchedPackages.size})",
+        )
+    }
+
+    /** Parent "unlock now": dismisses an open challenge via the engine (phase 7). */
+    fun parentOverride() {
+        record("parent override")
+        dispatch(GateEvent.ParentOverride)
+    }
+
+    /** Parent "reset timer": zeroes the accumulated counter (phase 7). */
+    fun resetTimer() {
+        record("parent reset timer")
+        dispatch(GateEvent.ResetTimer)
+    }
 
     /** Applies an answer from the challenge screen and reports how the engine reacted. */
     fun submitAnswer(value: Int): AnswerResult {
@@ -141,13 +183,17 @@ class GateCoordinator(
     private suspend fun drain(effects: List<GateEffect>) {
         effects.forEach { effect ->
             when (effect) {
-                GateEffect.PersistState -> store.writeState(
-                    PersistedState(
-                        gateState = engine?.currentState ?: return@forEach,
-                        lastSegmentMarker = clock.elapsedRealtimeMs(),
-                        bootCount = clock.bootCount(),
-                    ),
-                )
+                GateEffect.PersistState -> {
+                    val active = engine ?: return@forEach
+                    store.writeState(
+                        PersistedState(
+                            gateState = active.currentState,
+                            lastSegmentMarker = clock.elapsedRealtimeMs(),
+                            bootCount = clock.bootCount(),
+                            stats = active.currentStats,
+                        ),
+                    )
+                }
 
                 GateEffect.ShowChallenge -> enforcer.showChallenge()
                 GateEffect.HideChallenge -> enforcer.hideChallenge()
@@ -176,8 +222,12 @@ class GateCoordinator(
         is GateState.Idle -> state
     }
 
-    private fun persistedState(state: GateState) =
-        PersistedState(state, clock.elapsedRealtimeMs(), clock.bootCount())
+    private fun persistedState(state: GateState) = PersistedState(
+        gateState = state,
+        lastSegmentMarker = clock.elapsedRealtimeMs(),
+        bootCount = clock.bootCount(),
+        stats = engine?.currentStats ?: UsageStats(),
+    )
 
     private fun isInteractive(): Boolean =
         (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive

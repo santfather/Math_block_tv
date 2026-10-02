@@ -9,7 +9,6 @@ import androidx.core.content.ContextCompat
 import com.mathgate.MathGateApp
 import com.mathgate.core.GateState
 import com.mathgate.data.BootInfo
-import com.mathgate.data.PersistedState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,7 +39,15 @@ class BootReceiver : BroadcastReceiver() {
                     val settings = app.gateStore.readSettings()
                     val bootInfo = app.gateStore.readBootInfo()
                     if (settings.resetOnPowerLoss && !bootInfo.cleanShutdown) {
-                        app.gateStore.writeState(PersistedState(GateState.Idle(0L), 0L, bootCount))
+                        // Reset only the counter; the lifetime statistics survive a power loss.
+                        val persisted = app.gateStore.readState()
+                        app.gateStore.writeState(
+                            persisted.copy(
+                                gateState = GateState.Idle(0L),
+                                lastSegmentMarker = 0L,
+                                bootCount = bootCount,
+                            ),
+                        )
                         record(app, "power loss detected: gate state reset")
                     }
                     // Arm the marker: the next boot without a shutdown means another power loss.

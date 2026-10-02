@@ -9,6 +9,9 @@ sealed interface GateEvent {
     data object Tick : GateEvent
     data class AnswerSubmitted(val value: Int) : GateEvent
     data object ParentOverride : GateEvent
+
+    /** Parent action: zero the accumulated counter (phase 7). */
+    data object ResetTimer : GateEvent
     data object Reboot : GateEvent
 }
 
@@ -36,14 +39,17 @@ sealed interface GateEffect {
  */
 class GateEngine(
     private val clock: Clock,
-    private val settings: Settings,
+    settings: Settings,
     initialState: GateState = GateState.Idle(0L),
     initialWatchedForeground: Boolean = initialState is GateState.Counting,
     initialScreenOn: Boolean = true,
+    initialStats: UsageStats = UsageStats(),
     private val persistIntervalMs: Long = DEFAULT_PERSIST_INTERVAL_MS,
 ) {
 
+    private var settings: Settings = settings
     private var state: GateState = initialState
+    private var stats: UsageStats = initialStats
     private var watchedForeground: Boolean = initialWatchedForeground
     private var screenOn: Boolean = initialScreenOn
     private var lastPersistElapsed: Long = clock.elapsedRealtimeMs()
@@ -55,6 +61,14 @@ class GateEngine(
     val isWatchedForeground: Boolean get() = watchedForeground
     val isScreenOn: Boolean get() = screenOn
 
+    /** Lifetime statistics, persisted alongside the gate state (phase 7). */
+    val currentStats: UsageStats get() = stats
+
+    /** Applies a parent change at runtime so it takes effect without a restart (phase 7 DoD). */
+    fun updateSettings(settings: Settings) {
+        this.settings = settings
+    }
+
     fun onEvent(event: GateEvent): Pair<GateState, List<GateEffect>> {
         val now = clock.elapsedRealtimeMs()
         return when (event) {
@@ -65,6 +79,7 @@ class GateEngine(
             GateEvent.Tick -> onTick(now)
             is GateEvent.AnswerSubmitted -> onAnswer(event.value, now)
             GateEvent.ParentOverride -> onParentOverride(now)
+            GateEvent.ResetTimer -> onResetTimer(now)
             GateEvent.Reboot -> onReboot(now)
         }
     }
@@ -108,7 +123,9 @@ class GateEngine(
         val current = state
         if (current !is GateState.Counting) return current to emptyList()
 
-        val accumulated = current.accumulatedMs + elapsedSince(current.segmentStartElapsed, now)
+        val delta = elapsedSince(current.segmentStartElapsed, now)
+        stats = stats.copy(totalWatchedMs = stats.totalWatchedMs + delta)
+        val accumulated = current.accumulatedMs + delta
         if (accumulated >= settings.limitMs) return enterChallenge(now)
 
         state = GateState.Counting(accumulated, now)
@@ -145,6 +162,7 @@ class GateEngine(
         }
 
         val attempts = current.attempts + 1
+        stats = stats.copy(wrongAnswers = stats.wrongAnswers + 1)
         state = GateState.ChallengePending(
             problem = ProblemGenerator.generate(settings.difficultyLevel, now + attempts, current.problem),
             attempts = attempts,
@@ -165,6 +183,22 @@ class GateEngine(
         return state to listOf(GateEffect.HideChallenge, GateEffect.PersistState)
     }
 
+    /** Parent "reset timer": zero the counter; an open challenge is dismissed at the same time. */
+    private fun onResetTimer(now: Long): Pair<GateState, List<GateEffect>> {
+        val current = state
+        val effects = mutableListOf<GateEffect>()
+        if (current is GateState.ChallengePending) effects += GateEffect.HideChallenge
+        state = if (watchedForeground && screenOn) {
+            GateState.Counting(0L, now)
+        } else {
+            GateState.Idle(0L)
+        }
+        lastPersistElapsed = now
+        limitWarned = false
+        effects += GateEffect.PersistState
+        return state to effects
+    }
+
     private fun onReboot(now: Long): Pair<GateState, List<GateEffect>> {
         // Rule 6: elapsedRealtime restarted. Only the unflushed remainder (<= persistIntervalMs)
         // is lost; accumulatedMs is already on disk. A pending challenge survives the reboot.
@@ -181,7 +215,9 @@ class GateEngine(
     }
 
     private fun closeSegment(current: GateState.Counting, now: Long): Pair<GateState, List<GateEffect>> {
-        state = GateState.Idle(current.accumulatedMs + elapsedSince(current.segmentStartElapsed, now))
+        val delta = elapsedSince(current.segmentStartElapsed, now)
+        stats = stats.copy(totalWatchedMs = stats.totalWatchedMs + delta)
+        state = GateState.Idle(current.accumulatedMs + delta)
         return persisted(now)
     }
 
@@ -192,6 +228,7 @@ class GateEngine(
     }
 
     private fun enterChallenge(now: Long): Pair<GateState, List<GateEffect>> {
+        stats = stats.copy(blockedCount = stats.blockedCount + 1)
         state = GateState.ChallengePending(
             problem = ProblemGenerator.generate(settings.difficultyLevel, now),
             attempts = 0,

@@ -1,13 +1,16 @@
 package com.mathgate.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -105,14 +108,24 @@ class BlockActivity : ComponentActivity() {
         coordinator.start()
         setContent {
             MathGateTvTheme {
-                BlockScreen(coordinator = coordinator, onSolved = { finish() })
+                BlockScreen(
+                    coordinator = coordinator,
+                    onSolved = { finish() },
+                    // Fallback parent entry (roadmap phase 7): a long press on the title opens the
+                    // PIN-protected settings, so the launcher is not the only way in.
+                    onOpenParent = { startActivity(Intent(this, ParentActivity::class.java)) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun BlockScreen(coordinator: GateCoordinator, onSolved: () -> Unit) {
+private fun BlockScreen(
+    coordinator: GateCoordinator,
+    onSolved: () -> Unit,
+    onOpenParent: () -> Unit,
+) {
     val context = LocalContext.current
     val state by coordinator.gateState.collectAsState()
     var controller by remember { mutableStateOf<BlockController?>(null) }
@@ -134,12 +147,23 @@ private fun BlockScreen(coordinator: GateCoordinator, onSolved: () -> Unit) {
     if (active == null) {
         Box(modifier = Modifier.fillMaxSize().background(GateBackground))
     } else {
-        BlockContent(controller = active, state = state, onSolved = onSolved)
+        BlockContent(
+            controller = active,
+            state = state,
+            onSolved = onSolved,
+            onOpenParent = onOpenParent,
+        )
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BlockContent(controller: BlockController, state: GateState?, onSolved: () -> Unit) {
+private fun BlockContent(
+    controller: BlockController,
+    state: GateState?,
+    onSolved: () -> Unit,
+    onOpenParent: () -> Unit,
+) {
     LaunchedEffect(controller.feedback) {
         if (controller.feedback == Feedback.CORRECT) {
             delay(SuccessDisplayMs)
@@ -186,6 +210,11 @@ private fun BlockContent(controller: BlockController, state: GateState?, onSolve
                 text = stringResource(R.string.block_title),
                 color = GateOnBackground.copy(alpha = 0.7f),
                 fontSize = 26.sp,
+                // Hidden parent entry: hold OK on the title to reach the PIN-protected settings.
+                modifier = Modifier.combinedClickable(
+                    onClick = {},
+                    onLongClick = onOpenParent,
+                ),
             )
             Text(
                 text = "${controller.pending.problem.text} =",
@@ -516,16 +545,4 @@ private class BlockController(
     }
 }
 
-private fun digitForKey(key: Key): Int? = when (key) {
-    Key.Zero, Key.NumPad0 -> 0
-    Key.One, Key.NumPad1 -> 1
-    Key.Two, Key.NumPad2 -> 2
-    Key.Three, Key.NumPad3 -> 3
-    Key.Four, Key.NumPad4 -> 4
-    Key.Five, Key.NumPad5 -> 5
-    Key.Six, Key.NumPad6 -> 6
-    Key.Seven, Key.NumPad7 -> 7
-    Key.Eight, Key.NumPad8 -> 8
-    Key.Nine, Key.NumPad9 -> 9
-    else -> null
-}
+

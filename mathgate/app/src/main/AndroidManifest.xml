@@ -62,10 +62,14 @@
             android:showWhenLocked="true"
             android:theme="@style/Theme.MathGate.Block" />
 
-        <!-- Parent settings behind PIN (phase 7). -->
+        <!--
+          Parent settings behind PIN (phase 7). Exported because it is the accessibility service
+          `settingsActivity`: the system launches it from another process. The PIN gate is what
+          protects the settings, not the export flag.
+        -->
         <activity
             android:name=".ui.ParentActivity"
-            android:exported="false"
+            android:exported="true"
             android:theme="@style/Theme.MathGate" />
 
         <!-- Primary foreground detector (D-02). -->
