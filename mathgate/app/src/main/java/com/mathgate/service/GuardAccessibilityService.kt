@@ -7,6 +7,7 @@ import com.mathgate.MathGateApp
 import com.mathgate.core.EventLog
 import com.mathgate.core.Settings
 import com.mathgate.detect.A11yForegroundDetector
+import com.mathgate.detect.DetectorHeartbeat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,6 +26,7 @@ class GuardAccessibilityService : AccessibilityService() {
 
     private lateinit var detector: A11yForegroundDetector
     private lateinit var eventLog: EventLog
+    private lateinit var heartbeat: DetectorHeartbeat
 
     /** Watched packages, refreshed from the store when the service connects. */
     @Volatile
@@ -35,6 +37,7 @@ class GuardAccessibilityService : AccessibilityService() {
         val app = application as MathGateApp
         detector = app.a11yForegroundDetector
         eventLog = app.eventLog
+        heartbeat = app.a11yHeartbeat
         record("accessibility connected")
         app.gateCoordinator.start()
         scope.launch {
@@ -44,6 +47,8 @@ class GuardAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!this::detector.isInitialized) return
+        // Any event proves the accessibility channel is alive; the watchdog uses this (phase 6).
+        heartbeat.mark()
         // Only a newly activated window tells us the real foreground app. `TYPE_WINDOWS_CHANGED`
         // also fires when a window is removed, which made the launcher look like it came back
         // right after YouTube was resumed.

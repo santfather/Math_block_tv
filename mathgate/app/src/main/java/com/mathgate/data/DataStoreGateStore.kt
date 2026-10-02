@@ -47,12 +47,13 @@ class DataStoreGateStore(private val context: Context) : GateStore {
 
             else -> GateState.Idle(accumulated)
         }
-        return PersistedState(gateState, prefs[KEY_LAST_SEGMENT_MARKER] ?: 0L)
+        return PersistedState(gateState, prefs[KEY_LAST_SEGMENT_MARKER] ?: 0L, prefs[KEY_STATE_BOOT_COUNT] ?: 0)
     }
 
     override suspend fun writeState(state: PersistedState) {
         context.gateDataStore.edit { prefs ->
             prefs[KEY_LAST_SEGMENT_MARKER] = state.lastSegmentMarker
+            prefs[KEY_STATE_BOOT_COUNT] = state.bootCount
             when (val gate = state.gateState) {
                 is GateState.Idle -> {
                     prefs[KEY_STATE_TYPE] = STATE_IDLE
@@ -99,6 +100,21 @@ class DataStoreGateStore(private val context: Context) : GateStore {
         }
     }
 
+    override suspend fun readBootInfo(): BootInfo {
+        val prefs = context.gateDataStore.data.first()
+        return BootInfo(
+            bootCount = prefs[KEY_BOOT_COUNT] ?: -1,
+            cleanShutdown = prefs[KEY_CLEAN_SHUTDOWN] ?: false,
+        )
+    }
+
+    override suspend fun writeBootInfo(info: BootInfo) {
+        context.gateDataStore.edit { prefs ->
+            prefs[KEY_BOOT_COUNT] = info.bootCount
+            prefs[KEY_CLEAN_SHUTDOWN] = info.cleanShutdown
+        }
+    }
+
     private companion object {
 
         val KEY_STATE_TYPE = intPreferencesKey("state_type")
@@ -109,6 +125,10 @@ class DataStoreGateStore(private val context: Context) : GateStore {
         val KEY_ATTEMPTS = intPreferencesKey("attempts")
         val KEY_COOLDOWN_UNTIL = longPreferencesKey("cooldown_until_elapsed")
         val KEY_LAST_SEGMENT_MARKER = longPreferencesKey("last_segment_marker")
+        val KEY_STATE_BOOT_COUNT = intPreferencesKey("state_boot_count")
+
+        val KEY_BOOT_COUNT = intPreferencesKey("boot_count")
+        val KEY_CLEAN_SHUTDOWN = booleanPreferencesKey("clean_shutdown")
 
         val KEY_LIMIT_MS = longPreferencesKey("settings_limit_ms")
         val KEY_DIFFICULTY = intPreferencesKey("settings_difficulty")

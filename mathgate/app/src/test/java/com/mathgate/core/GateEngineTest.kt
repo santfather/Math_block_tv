@@ -218,6 +218,24 @@ class GateEngineTest {
     }
 
     @Test
+    fun `a reboot keeps a pending challenge but drops the cooldown`() {
+        val clock = FakeClock()
+        val engine = newEngine(clock)
+        reachChallenge(clock, engine)
+        engine.onEvent(GateEvent.AnswerSubmitted(wrongAnswer(engine)))
+
+        val pending = assertIs<GateState.ChallengePending>(engine.currentState)
+        assertTrue(pending.cooldownUntilElapsedMs > clock.elapsedMs)
+
+        val (state, effects) = engine.onEvent(GateEvent.Reboot)
+        val rebooted = assertIs<GateState.ChallengePending>(state)
+        assertEquals(0L, rebooted.cooldownUntilElapsedMs)
+        assertEquals(pending.problem.text, rebooted.problem.text)
+        assertEquals(pending.attempts, rebooted.attempts)
+        assertContains(effects, GateEffect.PersistState)
+    }
+
+    @Test
     fun `the correct answer unlocks and resets the counter`() {
         val clock = FakeClock()
         val engine = newEngine(clock)

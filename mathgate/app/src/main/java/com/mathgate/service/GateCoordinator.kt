@@ -79,14 +79,19 @@ class GateCoordinator(
         scope.launch {
             settings = store.readSettings()
             val persisted = store.readState()
+            // A different boot counter means the device rebooted: elapsed times from the
+            // previous session are meaningless, so a pending cooldown must be dropped (rule 6).
+            val rebooted = persisted.bootCount != clock.bootCount()
             engine = GateEngine(
                 clock = clock,
                 settings = settings,
-                initialState = reconcile(persisted.gateState),
+                initialState = reconcile(persisted.gateState, rebooted),
                 initialWatchedForeground = false,
                 initialScreenOn = isInteractive(),
             )
             _gateState.value = engine?.currentState
+            // Normalize the stored state and record the current boot counter.
+            engine?.let { store.writeState(persistedState(it.currentState)) }
             // The detector may have settled before the engine was ready.
             if (detector.watchedForeground.value) dispatch(GateEvent.YouTubeForeground)
             launchTicker()
@@ -115,6 +120,12 @@ class GateCoordinator(
         return if (newState is GateState.ChallengePending) AnswerResult.WRONG else AnswerResult.CORRECT
     }
 
+    /** Applies a foreground change discovered by the fallback watchdog (phase 6). */
+    fun onFallbackForeground(watched: Boolean) {
+        record("watchdog foreground -> $watched")
+        dispatch(if (watched) GateEvent.YouTubeForeground else GateEvent.YouTubeBackground)
+    }
+
     private fun dispatch(event: GateEvent) {
         val engine = engine ?: return
         val (newState, effects) = engine.onEvent(event)
@@ -134,6 +145,7 @@ class GateCoordinator(
                     PersistedState(
                         gateState = engine?.currentState ?: return@forEach,
                         lastSegmentMarker = clock.elapsedRealtimeMs(),
+                        bootCount = clock.bootCount(),
                     ),
                 )
 
@@ -156,11 +168,16 @@ class GateCoordinator(
     /**
      * A segment cannot survive process death: a persisted [GateState.Counting] is restored as
      * [GateState.Idle] with the accumulated time, losing only the unflushed remainder (A12).
+     * After a reboot the elapsed clock restarted, so a pending cooldown is dropped (rule 6).
      */
-    private fun reconcile(state: GateState): GateState = when (state) {
+    private fun reconcile(state: GateState, rebooted: Boolean): GateState = when (state) {
         is GateState.Counting -> GateState.Idle(state.accumulatedMs)
-        else -> state
+        is GateState.ChallengePending -> if (rebooted) state.copy(cooldownUntilElapsedMs = 0L) else state
+        is GateState.Idle -> state
     }
+
+    private fun persistedState(state: GateState) =
+        PersistedState(state, clock.elapsedRealtimeMs(), clock.bootCount())
 
     private fun isInteractive(): Boolean =
         (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive

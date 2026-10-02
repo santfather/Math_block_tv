@@ -23,13 +23,26 @@ class UsageStatsDetector(
     private val _watchedForeground = MutableStateFlow(false)
     override val watchedForeground: StateFlow<Boolean> = _watchedForeground.asStateFlow()
 
-    /** Queries recent usage events and updates [watchedForeground]. */
-    fun poll(watchedPackages: Set<String>) {
-        val lastPackage = lastForegroundPackage() ?: return
-        when (ForegroundFilter.decide(lastPackage, watchedPackages, ignoredPackages)) {
-            ForegroundDecision.IGNORE -> Unit
-            ForegroundDecision.WATCHED -> _watchedForeground.value = true
-            ForegroundDecision.NOT_WATCHED -> _watchedForeground.value = false
+    /**
+     * Queries recent usage events and updates [watchedForeground].
+     *
+     * @return `true` when this poll produced a decision; `false` when there was no usable event
+     *   (permission missing, or no foreground change in the window). A caller acting on the result
+     *   must ignore the `false` case instead of treating the unchanged value as "not watched".
+     */
+    fun poll(watchedPackages: Set<String>): Boolean {
+        val lastPackage = lastForegroundPackage() ?: return false
+        return when (ForegroundFilter.decide(lastPackage, watchedPackages, ignoredPackages)) {
+            ForegroundDecision.IGNORE -> false
+            ForegroundDecision.WATCHED -> {
+                _watchedForeground.value = true
+                true
+            }
+
+            ForegroundDecision.NOT_WATCHED -> {
+                _watchedForeground.value = false
+                true
+            }
         }
     }
 

@@ -134,11 +134,68 @@ foreground -> true  (package=com.google.android.youtube.tv)   # YouTube снов
    (`KEYCODE_MEDIA_PAUSE`/`PLAY`); факт отправки фиксируется в логе (`challenge shown/hidden`).
 
 
+## Наблюдения фазы 6 (живучесть, проверено на устройстве)
 
-## Что ещё нужно проверить вручную (не критично для фаз 1–3)
+Состояние читалось из `files/datastore/mathgate.preferences_pb` через
+`adb shell run-as com.mathgate cat ...` (файл — protobuf Preferences, ключи `state_type`,
+`accumulated_ms`, `boot_count`, `clean_shutdown`).
 
-- Поведение при выключении кнопкой пульта: сон или полное выключение; включён ли «быстрый запуск» (влияет на `resetOnPowerLoss`, фаза 6).
-- `dumpsys window | grep mCurrentFocus` при **открытом** YouTube — снять в фазе 3 (сейчас ТВ на главном экране Google TV, `mFocusedApp = ...tv.launcherx/.coreservices.bootmode.DispatchActivity`).
+**Перезагрузка (`adb reboot`).** `BOOT_COMPLETED` приходит с задержкой — сначала его получают
+системные приложения Sony, наше приложение примерно через **~1.5 мин** после
+`sys.boot_completed = 1`:
+
+```
+15:26:24  accessibility connected                      # система сама переподключила службу
+15:26:27  coordinator started
+15:27:28  boot receiver: guard service started (boot=468)   # наш BootReceiver
+15:27:28  guard service started (interactive=true)
+15:27:31  watchdog fallback -> false (a11yEnabled=true, stale=true)
+```
+
+- `boot_count` 467 → 468; `state_boot_count` = 468; `accumulated_ms` сохранён (A7/A8/A9).
+- `LOCKED_BOOT_COMPLETED` на ТВ не приходит (нет экрана блокировки) — фактически работает
+  `BOOT_COMPLETED`.
+
+**Самовосстановление accessibility (A11).** Служба возвращается и при удалении из списка, и при
+выключении мастер-переключателя:
+
+```
+settings delete secure enabled_accessibility_services   -> accessibility service re-added
+settings put    secure accessibility_enabled 0          -> accessibility master switch re-enabled
+                                                         -> accessibility connected
+```
+
+**«Потеря питания» (A10, временно `resetOnPowerLoss=true`).** `am force-stop` перед ребутом
+(чтобы не записался `clean_shutdown=true`), затем `adb reboot`:
+
+```
+power loss detected: gate state reset     # accumulated_ms = 0
+boot receiver: guard service started (boot=470)
+```
+
+При `resetOnPowerLoss=false` (по умолчанию) лога нет, `accumulated_ms` сохраняется (A9).
+
+**Гибель процесса (A12).** `am force-stop` во время `Counting` → повторный запуск приложения:
+`state_type` `Counting → Idle`, `accumulated_ms` восстановлен, сервис и координатор поднялcя.
+
+**Watchdog (регрессия, исправлено в фазе 6).** Во время стабильного воспроизведения события
+accessibility не приходят > 60 с (нет смены окна), heartbeat становится «устаревшим», и watchdog
+переходил на резервный канал. Раньше он передавал в координатор `false` даже когда у
+`UsageStats` не было показаний (нет прав / нет свежих переходов), из-за чего счётчик ложно
+сбрасывался. Теперь резервный канал подаёт сигнал только при реальных показаниях:
+
+```
+foreground -> true (package=com.google.android.youtube.tv)   # 80 с без ложного сброса
+```
+
+
+
+## Что ещё нужно проверить вручную (не критично для фаз 1–6)
+
+- Поведение при выключении кнопкой пульта: сон или полное выключение; включён ли «быстрый запуск».
+  Реагирует на `resetOnPowerLoss` (фаза 6): эвристика проверена симуляцией потери питания
+  (`force-stop` + `reboot`), но реальное выключение пультом на ТВ ещё не проверялось — от него
+  зависит, записывается ли `ACTION_SHUTDOWN`.
 
 ## Вывод команд (raw)
 

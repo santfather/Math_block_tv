@@ -1,10 +1,12 @@
 package com.mathgate
 
 import android.app.Application
+import android.os.SystemClock
 import com.mathgate.core.EventLog
 import com.mathgate.data.DataStoreGateStore
 import com.mathgate.data.GateStore
 import com.mathgate.detect.A11yForegroundDetector
+import com.mathgate.detect.DetectorHeartbeat
 import com.mathgate.service.AndroidClock
 import com.mathgate.service.ChallengeEnforcer
 import com.mathgate.service.GateCoordinator
@@ -25,6 +27,9 @@ class MathGateApp : Application() {
 
     /** Primary foreground detector fed by the accessibility service (phase 3). */
     val a11yForegroundDetector: A11yForegroundDetector by lazy { A11yForegroundDetector() }
+
+    /** Liveness of the accessibility channel, consulted by the fallback watchdog (phase 6). */
+    val a11yHeartbeat: DetectorHeartbeat by lazy { DetectorHeartbeat(SystemClock::elapsedRealtime) }
 
     /** Starts/stops the challenge and drives media keys (phase 5). */
     val challengeEnforcer: ChallengeEnforcer by lazy { ChallengeEnforcer(this, eventLog) }

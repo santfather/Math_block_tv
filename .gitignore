@@ -6,6 +6,7 @@
 # Gradle / Android build output (matched at any depth)
 build/
 .gradle/
+.kotlin/
 captures/
 .externalNativeBuild/
 .cxx/

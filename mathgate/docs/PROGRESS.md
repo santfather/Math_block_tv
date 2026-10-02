@@ -10,7 +10,8 @@
 - Фаза 3 (детект YouTube): **готово** — проверено на реальном ТВ.
 - Фаза 4 (блокирующий экран и UI с пульта): **готово** — проверено на реальном ТВ.
 - Фаза 5 (принуждение/enforcement): **готово** — проверено на реальном ТВ.
-- Фазы 6-10: не начаты.
+- Фаза 6 (живучесть и самовосстановление): **готово** — проверено на реальном ТВ.
+- Фазы 7-10: не начаты.
 
 ---
 
@@ -205,24 +206,85 @@
 - Jacoco, `com/mathgate/core`: LINE **95.0%** (191/201), BRANCH **88.2%** (82/93),
   INSTRUCTION **94.4%** (1222/1294). DoD (line ≥ 90%) выполнен.
 
+## Фаза 6: живучесть и самовосстановление — готово
+
+- Что сделано:
+  - `data/GateStore` — в `PersistedState` добавлен `bootCount` (номер загрузки, при которой
+    состояние было записано) и интерфейс `BootInfo(bootCount, cleanShutdown)` +
+    `readBootInfo()`/`writeBootInfo()`. `DataStoreGateStore` хранит ключи `boot_count`,
+    `clean_shutdown`, `state_boot_count`.
+  - `service/BootReceiver` (D-07) — на `BOOT_COMPLETED`/`LOCKED_BOOT_COMPLETED` через
+    `goAsync()`: читает `resetOnPowerLoss` и `BootInfo`; при `resetOnPowerLoss && !cleanShutdown`
+    сбрасывает состояние (`Idle(0L)`); всегда записывает `BootInfo(bootCount, cleanShutdown=false)`
+    и поднимает `GuardForegroundService` + `SelfHealer.ensureAccessibilityEnabled()`.
+  - `service/SelfHealer` (D-08) — `ContentObserver` на `ENABLED_ACCESSIBILITY_SERVICES`
+    **и** `ACCESSIBILITY_ENABLED`: дописывает наш компонент обратно в список и включает мастер-
+    переключатель, если он был выключен. Требует `WRITE_SECURE_SETTINGS` (выдаётся один раз
+    через adb). Запись идемпотентна — наблюдатель сходится без цикла.
+  - `detect/DetectorHeartbeat` — чистый Kotlin-маркер живости основного канала
+    (`mark()`/`isStale()`); `GuardAccessibilityService` отмечает его на каждом событии.
+  - `service/GuardForegroundService` — watchdog: если accessibility включён и heartbeat свежий,
+    резервный канал молчит; иначе опрашивает `UsageStatsDetector` и передаёт результат в
+    координатор (`onFallbackForeground`). Резервный канал подаёт сигнал **только при наличии
+    реальных показаний** (нет прав/нет свежих переходов → состояние основного канала не
+    переопределяется). `ACTION_SHUTDOWN` в этом же сервисе пишет `BootInfo(cleanShutdown=true)`.
+  - `service/GateCoordinator` — при старте сравнивает `persisted.bootCount` с текущим
+    `clock.bootCount()`: после перезагрузки `ChallengePending` сохраняется, но кулдаун
+    сбрасывается (`elapsedRealtime` обнулился); `Counting` восстанавливается как `Idle(accumulated)`.
+    Новый метод `onFallbackForeground(watched)`.
+- Что проверено на устройстве (Sony BRAVIA, Android 12, `adb`; состояние сверялось чтением
+  `files/datastore/mathgate.preferences_pb` через `run-as`):
+  - **A7/A8** — реальная перезагрузка ТВ (`adb reboot`): `boot_count` 467→468, `BOOT_COMPLETED`
+    доставлен (с задержкой ~1.5 мин после `sys.boot_completed`), `boot receiver: guard service
+    started (boot=468)`, foreground-сервис и accessibility поднялись автоматически; состояние
+    сохранено.
+  - **A9** — «потеря питания» при `resetOnPowerLoss=false` (по умолчанию): после ребута лог
+    `power loss detected` отсутствует, `accumulated_ms` сохранён.
+  - **A10** — то же при `resetOnPowerLoss=true` (временно, затем возвращено `false`): лог
+    `power loss detected: gate state reset`, `accumulated_ms = 0`.
+  - **A11** — самовосстановление accessibility: удаление сервиса из списка → `accessibility
+    service re-added`; выключение мастер-переключателя → `accessibility master switch re-enabled`;
+    сервис переподключается (`accessibility connected`).
+  - **A12** — `am force-stop` во время `Counting` → повторный запуск приложения: сервис и
+    координатор поднялись, `state_type` `Counting → Idle`, `accumulated_ms` восстановлен
+    (182 985 мс без потерь).
+- Отклонения от roadmap и причины:
+  - `LOCKED_BOOT_COMPLETED` объявлен в манифесте, но на ТВ нет экрана блокировки — фактически
+    приходит `BOOT_COMPLETED` (в `DEVICE_NOTES.md`).
+  - Порог «тишины» основного канала — `HEARTBEAT_STALE_MS = 60_000L` (roadmap: «N минут»);
+    резервный канал подаёт сигнал только при реальных показаниях UsageStats, поэтому ложное
+    переключение при простое основного канала не сбрасывает счётчик.
+- Открытые вопросы к пользователю: нет.
+- Следующий шаг: фаза 7 — экран родителя (PIN), настройки лимита/сложности/пакетов, статистика.
+
+### Тесты и покрытие (фаза 6)
+
+- `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:jacocoTestReport` → **BUILD SUCCESSFUL**,
+  45 тестов (добавлены `DetectorHeartbeatTest` — 3 теста; `GateEngineTest` — сохранение
+  `ChallengePending` со сбросом кулдауна после ребута).
+- Jacoco, `com/mathgate/core`: LINE **95.0%** (191/201), BRANCH **88.2%** (82/93),
+  INSTRUCTION **94.4%** (1222/1294). DoD (line ≥ 90%) выполнен.
+
 ---
 
 ## Известные проблемы
 
-- Логика фаз 6-7 ещё в виде заглушек с `TODO("<phase>")` (`SelfHealer`, `BootReceiver`,
-  `PinHasher`).
+- Логика фазы 7 ещё в виде заглушек с `TODO("<phase>")` (`PinHasher`); `SelfHealer` и
+  `BootReceiver` реализованы в фазе 6.
 - Дефолт `multipleChoice` продублирован в `DataStoreGateStore.readSettings()` (`?: false`)
   вместо значения из `Settings`; при появлении экрана настроек (фаза 7) свести к одному источнику.
 - Настройки (список пакетов) перечитываются детектором при подключении сервиса; применение
   изменений без перезапуска — фаза 7.
 - При возврате в уже запущенный YouTube лаунчер на короткое время (< 3 с) снова считается
   передним планом — конечное состояние корректно (детали в `DEVICE_NOTES.md`).
-- `GateCoordinator` живёт в процессе приложения; если процесс убит системой, enforcement
-  останавливается до следующего запуска сервиса/`AccessibilityService` — watchdog/self-healer
-  относится к фазе 6.
+- `GateCoordinator` живёт в процессе приложения; после гибели процесса сервис поднимается
+  (`START_STICKY`/`AccessibilityService`), а накопленное время восстанавливается (A12, фаза 6).
+- Резервный канал watchdog опирается на «Usage access» (`PACKAGE_USAGE_STATS`); без него он
+  не переопределяет состояние основного канала (безопасный режим, фаза 6).
+- `BOOT_COMPLETED` на этом ТВ приходит с задержкой ~1.5 мин после `sys.boot_completed`
+  (сначала получают системные приложения) — учитывать в ручных проверках.
 
 ## Следующий шаг
 
-Фаза 6: устойчивость — `BootReceiver` (перезапуск служб после загрузки), watchdog/self-healer для
-автоподъёма `AccessibilityService` и foreground-сервиса, обработка `resetOnPowerLoss`, а также
-сведение источников `SCREEN_ON/OFF` к одному владельцу.
+Фаза 7: экран родителя за PIN (`ParentActivity`, `PinHasher`), настройки лимита/сложности/
+режима/пакетов и статистика просмотра; `SetupActivity` превращается в мастер первичной настройки.
