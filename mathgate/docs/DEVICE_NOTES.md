@@ -70,7 +70,9 @@ screen ON  (interactive=true)                                     # KEYCODE_WAKE
    whitelist на случай других системных оверлеев.
 3. **Возврат в YouTube из лаунчера**: лаунчер на ~2–3 секунды снова становится передним планом
    (это реальный переход, ребёнок действительно на главном экране), затем YouTube снова `true`.
-   Конечное состояние корректно.
+   Уточнение (проверка 0.1.1, см. «Наблюдения фазы 10»): при *запуске* YouTube окно-заставка
+   лаунчера может оставить состояние в `false` — повторного `TYPE_WINDOW_STATE_CHANGED` от YouTube
+   не приходит, пока внутри приложения не сменится активность.
 
 
 ## Наблюдения фазы 4 (блокирующий экран, проверено на устройстве)
@@ -125,8 +127,11 @@ foreground -> true  (package=com.google.android.youtube.tv)   # YouTube снов
 Особенности:
 
 1. **Смена приложения блоком.** Когда `BlockActivity` выходит вперёд, `A11yForegroundDetector`
-   получает `package=com.mathgate` → `foreground -> false`. В состоянии `ChallengePending` это
-   ожидаемо: движок блок остаётся, а при повторном появлении YouTube снова шлёт `ShowChallenge`.
+   получает `package=com.mathgate` → `foreground -> false`. Это оказалось **багом** (исправлен в
+   0.1.1, см. «Наблюдения фазы 10»): после верного ответа YouTube не присылал нового
+   `TYPE_WINDOW_STATE_CHANGED`, сигнал оставался `false`, и счётчик не возобновлялся. Теперь окна
+   Math Gate игнорируются (`ForegroundFilter.SELF_PACKAGE`), и `foreground -> false` при показе
+   блока не происходит.
 2. **Проверка сценариев.** Для ускорения `limitMs` временно снижался до 60 с, `warnBeforeMs` — до
    20 с; после проверки значения возвращены (15 мин / 60 с). Сценарии A1–A5 пройдены (A6 — по
    конструкции, время по `elapsedRealtime`).
@@ -264,6 +269,46 @@ settings delete secure enabled_accessibility_services -> accessibility service r
 **Пакеты ТВ (фаза 8).** Найденные браузеры и медиа-пакеты: `com.tvwebbrowser.v22` (браузер),
 `com.google.android.katniss` (Google TV), `com.google.android.youtube.tv` / `.tvkids` / `.tvmusic`.
 Сторонние клиенты YouTube (SmartTube и подобные) на ТВ не установлены.
+
+## Наблюдения фазы 10 (проверка багфикса 0.1.1, 2026-10-02)
+
+Release 0.1.1 (`versionCode 2`) установлен поверх по `adb install -r` тем же ключом — настройки и
+PIN сохранились. Лимит временно 5 мин. Полный цикл «блок → ответ → повторный блок»:
+
+```
+19:54:45  foreground -> true (package=com.google.android.youtube.tv)   # старт счётчика
+19:58:40  limit warning shown                                          # за 60 с до лимита
+19:59:40  challenge shown                                              # 1-й блок, 5 мин ровно
+20:00:13  challenge hidden                                             # верный ответ
+20:04:14  limit warning shown                                          # 2-й цикл
+20:05:14  challenge shown                                              # 2-й блок, снова ровно 5 мин
+```
+
+- За весь цикл **нет** `foreground -> false (package=com.mathgate)` — окна Math Gate игнорируются,
+  сигнал `watched` сохраняется сквозь блок, и счётчик возобновляется сразу после верного ответа.
+  Это подтверждает фикс бага «после решения доступ к YouTube неограничен».
+- Ответ вводился по adb: цифра — `input keyevent KEYCODE_<n>` (ловится `onPreviewKeyEvent` панели),
+  затем навигация D-pad до «Ответить» + `KEYCODE_DPAD_CENTER`; пример читался через
+  `uiautomator dump`. Лимит возвращён на 15 мин через `ParentActivity` (PIN `1234`).
+
+**Побочная находка — заставка лаунчера.** При запуске YouTube окно-заставка
+`com.google.android.apps.tv.launcherx` приходит как `TYPE_WINDOW_STATE_CHANGED` уже *после* того, как
+YouTube объявил себя (`foreground -> true`), поэтому детектор уходит в `false`:
+
+```
+19:53:16  foreground -> true  (package=com.google.android.youtube.tv)
+19:53:16  foreground -> false (package=com.google.android.apps.tv.launcherx)   # заставка
+# снятие заставки -> только TYPE_WINDOWS_CHANGED (игнорируется), YouTube на экране, но сигнал = false
+```
+
+По `dumpsys window windows` при этом YouTube — верхнее прикладное окно (`Window #2`), а лаунчер
+(`#3`) под ним; состояние восстанавливается только после смены активности внутри YouTube
+(например, `intent VIEW` на видео → `foreground -> true`). В багфикс 0.1.1 не входит (см.
+«Известные проблемы» в `PROGRESS.md`).
+
+**Артефакт тестов:** `adb shell uiautomator dump` на этом ТВ вызывает перезапуск службы
+доступности (`accessibility destroyed` → `accessibility connected`); на работу приложения не
+влияет, но в логе это видно.
 
 ## Что ещё нужно проверить вручную (не критично для фаз 1–7)
 
