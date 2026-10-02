@@ -33,13 +33,22 @@ enum class ForegroundDecision {
 object ForegroundFilter {
 
     /**
-     * System windows that can briefly appear above the watched app (volume panel, TV info
-     * bar). Their events must NOT look like leaving YouTube, so the previous state is kept.
+     * Math Gate's own package. The challenge screen, the settings and the setup wizard are
+     * shown *over* the watched app; if they counted as "left YouTube", the counter would stop
+     * and never resume (the firmware does not always report the underlying window again when an
+     * overlay closes), so the next challenge would never appear (bugfix, phase 10).
+     */
+    const val SELF_PACKAGE: String = "com.mathgate"
+
+    /**
+     * Package windows that must NOT change the watched state: our own surfaces and transient
+     * system windows (volume panel, TV info bar) that can briefly appear above the watched app.
      *
      * The list is intentionally small; phase-3 device tests extend it as needed.
      */
     val DEFAULT_IGNORED_PACKAGES: Set<String> = setOf(
         "com.android.systemui",
+        SELF_PACKAGE,
     )
 
     fun decide(

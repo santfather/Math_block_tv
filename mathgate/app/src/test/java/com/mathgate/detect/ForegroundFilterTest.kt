@@ -36,4 +36,13 @@ class ForegroundFilterTest {
         // Ignoring wins over watching when a package is in both lists.
         assertEquals(ForegroundDecision.IGNORE, ForegroundFilter.decide("com.android.systemui", ignored, ignored))
     }
+
+    @Test
+    fun `math gate's own windows do not count as leaving the watched app`() {
+        val defaults = ForegroundFilter.DEFAULT_IGNORED_PACKAGES
+        assertEquals(
+            ForegroundDecision.IGNORE,
+            ForegroundFilter.decide(ForegroundFilter.SELF_PACKAGE, watched, defaults),
+        )
+    }
 }

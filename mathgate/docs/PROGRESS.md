@@ -393,6 +393,22 @@
 - Следующий шаг: эксплуатация 3 дня с фиксацией падений/ложных блокировок; при обновлении YouTube —
   прогон A1–A5 и запись версии в `DEVICE_NOTES.md` (A16).
 
+### Исправление после приёмки (bugfix, 0.1.1)
+
+- **Симптом:** после первого верного ответа блок больше не появлялся — «неограниченный доступ».
+- **Причина:** `ChallengeEnforcer.showChallenge()` показывал `BlockActivity` (пакет `com.mathgate`)
+  поверх YouTube. Детектор классифицировал наше собственное окно как `NOT_WATCHED` →
+  `watchedForeground=false`; на верный ответ движок уходил в `Idle(0)`. Возврат в уже запущенное
+  окно YouTube на этой прошивке порождает `TYPE_WINDOWS_CHANGED` (игнорируется службой, см.
+  `DEVICE_NOTES.md`, фаза 3), а не `TYPE_WINDOW_STATE_CHANGED`, поэтому `true` больше не приходило
+  и счётчик не возобновлялся.
+- **Фикс:** `ForegroundFilter.SELF_PACKAGE = "com.mathgate"` добавлен в
+  `DEFAULT_IGNORED_PACKAGES` — окна самого Math Gate (блок, настройки, мастер) больше не считаются
+  «уходом с YouTube», сигнал `watched` сохраняется сквозь блок. Регрессионные тесты:
+  `ForegroundFilterTest`, `A11yForegroundDetectorTest`. `versionCode 2`, `versionName 0.1.1`.
+- **Статус:** юнит-тесты проходят; проверка полного цикла на ТВ — как только устройство вернётся в
+  сеть (установка `install.sh` поверх сохранит настройки/PIN, тем же ключом).
+
 ### Тесты и покрытие (фаза 10)
 
 - `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:jacocoTestReport` → **BUILD SUCCESSFUL**,

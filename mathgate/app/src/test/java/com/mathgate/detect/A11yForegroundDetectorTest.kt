@@ -43,4 +43,19 @@ class A11yForegroundDetectorTest {
         detector.onPackageChanged(null, watched)
         assertTrue(detector.watchedForeground.value)
     }
+
+    @Test
+    fun `the challenge window does not stop counting and no resume event is needed`() {
+        // YouTube is being watched.
+        detector.onPackageChanged("com.google.android.youtube.tv", watched)
+        assertTrue(detector.watchedForeground.value)
+
+        // The challenge covers YouTube; our own window must not look like leaving it.
+        detector.onPackageChanged(ForegroundFilter.SELF_PACKAGE, watched)
+        assertTrue(detector.watchedForeground.value)
+
+        // The child solves it; YouTube is visible again without any new window event, so the
+        // signal must still be "watched" — otherwise the counter would never restart.
+        assertTrue(detector.watchedForeground.value)
+    }
 }
