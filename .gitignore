@@ -23,6 +23,8 @@ local.properties
 # Signing material — never commit keys
 *.keystore
 *.jks
+keystore.properties
+keystore/
 app/release/
 
 # OS / editor junk

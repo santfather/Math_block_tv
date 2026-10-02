@@ -30,4 +30,15 @@ echo "==> Accessibility state"
 "${ADB[@]}" shell settings get secure accessibility_enabled || true
 
 echo "==> Math Gate installed?"
-"${ADB[@]}" shell pm list packages | grep "$PKG" || echo "    not installed"
+if "${ADB[@]}" shell pm list packages | grep -q "$PKG"; then
+  "${ADB[@]}" shell dumpsys package "$PKG" | grep -E "versionName|versionCode" || true
+else
+  echo "    not installed"
+fi
+
+echo "==> Math Gate permissions / appops"
+"${ADB[@]}" shell dumpsys package "$PKG" | grep -E "WRITE_SECURE_SETTINGS|PACKAGE_USAGE_STATS" || true
+"${ADB[@]}" shell appops get "$PKG" GET_USAGE_STATS || true
+
+echo "==> Math Gate services running?"
+"${ADB[@]}" shell dumpsys activity services "$PKG" | grep -E "ServiceRecord|isForeground" || echo "    no services"

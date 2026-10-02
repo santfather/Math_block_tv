@@ -36,8 +36,8 @@
 | 6 | Живучесть и самовосстановление | готово (проверено на ТВ) |
 | 7 | Родительский режим | готово (проверено на ТВ) |
 | 8 | Закрытие обходов | готово (проверено на ТВ) |
-| 9 | Device Owner (опционально) | не начато |
-| 10 | Приёмка, сборка и поставка | не начато |
+| 9 | Device Owner (опционально) | пропущено (неприменимо) |
+| 10 | Приёмка, сборка и поставка | готово, кроме 3-дневной выдержки DoD |
 
 ## Требования
 
@@ -60,7 +60,7 @@ TV_block/
     │       ├── detect/           # детект переднего плана (AccessibilityService + UsageStats)
     │       ├── service/          # службы, координатор, enforcement
     │       └── ui/               # экраны на Compose for TV
-    ├── docs/                     # PROGRESS, DEVICE_NOTES, TEST_PLAN, PARENT_GUIDE, IDEAS
+    ├── docs/                     # PROGRESS, DEVICE_NOTES, TEST_PLAN, PARENT_GUIDE, SIGNING, IDEAS
     └── scripts/                  # install.sh, check-device.sh
 ```
 
@@ -70,6 +70,7 @@ TV_block/
 
 ```bash
 ./gradlew assembleDebug        # debug-APK
+./gradlew assembleRelease      # подписанный release-APK (нужен keystore.properties, см. SIGNING.md)
 ./gradlew test                 # unit-тесты (ядро на JVM)
 ./gradlew jacocoTestReport     # покрытие core/ (DoD: line >= 90%)
 ```
@@ -78,11 +79,12 @@ TV_block/
 
 ```bash
 adb connect <IP-телевизора>:5555
-mathgate/scripts/install.sh [adb-serial]     # сборка + install + разрешения + мастер настройки
+mathgate/scripts/install.sh [--release|--debug] [adb-serial]   # по умолчанию --release
 ```
 
-Скрипт устанавливает debug-APK, выдаёт `WRITE_SECURE_SETTINGS` (нужно `SelfHealer`, фаза 6) и
-включает службу доступности. Проверить состояние устройства:
+Скрипт собирает и устанавливает APK (`adb install -r`), выдаёт `WRITE_SECURE_SETTINGS` (нужно
+`SelfHealer`, фаза 6), включает службу доступности и запускает мастер настройки. Проверить
+состояние устройства:
 
 ```bash
 mathgate/scripts/check-device.sh [adb-serial]
@@ -103,7 +105,8 @@ adb shell settings put secure accessibility_enabled 1
 | [`mathgate/docs/PROGRESS.md`](mathgate/docs/PROGRESS.md) | Отчёт по каждой фазе: сделано / проверено на ТВ / отклонения |
 | [`mathgate/docs/DEVICE_NOTES.md`](mathgate/docs/DEVICE_NOTES.md) | Факты о телевизоре и особенности прошивки |
 | [`mathgate/docs/TEST_PLAN.md`](mathgate/docs/TEST_PLAN.md) | Сценарии приёмки A1–A16 и матрица обходов |
-| [`mathgate/docs/PARENT_GUIDE.md`](mathgate/docs/PARENT_GUIDE.md) | Инструкция для родителя (черновик) |
+| [`mathgate/docs/PARENT_GUIDE.md`](mathgate/docs/PARENT_GUIDE.md) | Инструкция для родителя: установка, настройка, удаление, ограничения |
+| [`mathgate/docs/SIGNING.md`](mathgate/docs/SIGNING.md) | Release-подпись, хранение ключа и процедура обновления |
 | [`mathgate/docs/IDEAS.md`](mathgate/docs/IDEAS.md) | Идеи вне текущего скоупа |
 
 ## Технологии
